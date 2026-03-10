@@ -1,4 +1,4 @@
-# app_oncology_dashboard_layout.py
+# app_oncology_dashboard_horizontal.py
 
 import streamlit as st
 import pandas as pd
@@ -53,9 +53,7 @@ if uploaded_file:
 
     final_df = pd.concat(rows, ignore_index=True)
 
-    # -------------------------
-    #  Layout: Graph Left 3/4, Controls Right 1/4
-    # -------------------------
+    # Layout: Graph Left 3/4, Controls Right 1/4
     col1, col2 = st.columns([3, 1])
 
     with col2:
@@ -69,12 +67,13 @@ if uploaded_file:
     ]
 
     with col1:
-        st.subheader(f"Bar Graph: {metric_filter} by Cancer Category")
+        st.subheader(f"Horizontal Bar Graph: {metric_filter} by Cancer Category")
         fig = px.bar(
             df_filtered,
-            x=cancer_col,
-            y="Value",
+            y=cancer_col,         # category on Y axis
+            x="Value",            # metric on X axis
             color="Parameter",
+            orientation='h',      # horizontal bars
             barmode="group",
             text="Value",
             template="plotly_white",
@@ -83,8 +82,8 @@ if uploaded_file:
         )
 
         fig.update_layout(
-            xaxis_title="Cancer Category",
-            yaxis_title=metric_filter,
+            xaxis_title=metric_filter,
+            yaxis_title="Cancer Category",
             width=1200,
             height=600
         )
@@ -92,7 +91,7 @@ if uploaded_file:
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # HTML Export inside same column
+        # HTML Export
         buffer = io.BytesIO()
         fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
 
