@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final.py
+# app_oncology_dashboard_final_buttons.py
 
 import streamlit as st
 import pandas as pd
@@ -63,22 +63,23 @@ if uploaded_file:
     final_df = pd.concat(rows, ignore_index=True)
 
     # -------------------------
-    # 5️⃣ Controls: Metric Buttons + Month + Cancer Category + View Toggle
+    # 5️⃣ Controls
     # -------------------------
     st.subheader("Controls")
-    col1, col2, col3, col4 = st.columns([3, 3, 3, 3])
 
-    with col1:
-        metric_filter = st.radio("Select Metric", options=final_df["Metric"].unique(), horizontal=True)
+    # Metric Buttons
+    metric_filter = st.radio("Select Metric", options=final_df["Metric"].unique(), horizontal=True)
 
-    with col2:
-        month_filter = st.multiselect("Select Month(s)", options=final_df[month_col].unique(), default=final_df[month_col].unique())
+    # Month Multi-select
+    month_filter = st.multiselect("Select Month(s)", options=final_df[month_col].unique(), default=final_df[month_col].unique())
 
-    with col3:
-        cancer_filter = st.multiselect("Select Cancer Category(s)", options=final_df[cancer_col].unique(), default=final_df[cancer_col].unique())
+    # Cancer Category Buttons (multi-select style)
+    st.markdown("**Select Cancer Category(s)**")
+    cancer_options = final_df[cancer_col].unique()
+    cancer_selected = st.multiselect("", options=cancer_options, default=list(cancer_options))
 
-    with col4:
-        view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
+    # View Toggle
+    view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
     # -------------------------
     # 6️⃣ Filtered Data
@@ -86,7 +87,7 @@ if uploaded_file:
     df_filtered = final_df[
         (final_df["Metric"] == metric_filter) &
         (final_df[month_col].isin(month_filter)) &
-        (final_df[cancer_col].isin(cancer_filter))
+        (final_df[cancer_col].isin(cancer_selected))
     ]
 
     # -------------------------
@@ -106,13 +107,13 @@ if uploaded_file:
             color_discrete_sequence=px.colors.qualitative.Plotly,
             title=f"{metric_filter} by Cancer Category"
         )
-        # Font size adjustments
+        # Font size adjustments (all ≥12)
         fig.update_layout(
             xaxis_title=metric_filter,
             yaxis_title="Cancer Category",
-            xaxis=dict(title_font=dict(size=12), tickfont=dict(size=11)),
-            yaxis=dict(title_font=dict(size=12), tickfont=dict(size=11)),
-            legend=dict(font=dict(size=11)),
+            xaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
+            yaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
+            legend=dict(font=dict(size=12)),
             height=600,
             margin=dict(l=50, r=50, t=80, b=50)
         )
@@ -132,7 +133,10 @@ if uploaded_file:
 
     else:  # Table view
         st.subheader(f"Data Table: {metric_filter}")
-        st.dataframe(df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col), height=500)
+        st.dataframe(
+            df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
+            height=500
+        )
 
         # Optional CSV download
         csv_buffer = io.StringIO()
