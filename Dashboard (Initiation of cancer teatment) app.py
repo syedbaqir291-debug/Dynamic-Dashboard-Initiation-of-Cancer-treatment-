@@ -1,62 +1,41 @@
-# oncology_dashboard_multi_sheet_aggregated.py
+# oncology_dashboard_multi_sheet.py
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard by QPSD SKMCH & RC V.1")
+st.title("Oncology Dashboard SKMCH & RC )")
 
 # -------------------------
 # 1️⃣ Upload Excel
 # -------------------------
-uploaded_file = st.file_uploader("Upload Excel Workbook with Precomputed Metrics", type=["xlsx", "csv"])
+uploaded_file = st.file_uploader("Upload Excel Workbook with Precomputed Metrics", type=["xlsx"])
 
 if uploaded_file:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    # Load all sheets
+    xl = pd.ExcelFile(uploaded_file)
+    sheet_names = xl.sheet_names  # ["Mean", "Median", "Standard Deviation", "Maximum", "Minimum"]
 
-    st.success("File uploaded successfully!")
-
-    # -------------------------
-    # Columns
-    # -------------------------
-    month_col = df.columns[0]       # Month
-    cancer_col = df.columns[1]      # Cancer Category
-    parameter_cols = list(df.columns[2:])  # Parameters
-
-    # Ensure numeric columns
-    for col in parameter_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    st.success(f"Workbook loaded with sheets: {sheet_names}")
 
     # -------------------------
-    # Metric selection
+    # 2️⃣ Metric selection (Sheet name)
     # -------------------------
-    metric_dict = {
-        "Mean": np.mean,
-        "Median": np.median,
-        "SD": lambda x: np.std(x, ddof=1),
-        "Max": np.max,
-        "Min": np.min
-    }
+    metric_filter = st.radio("Select Metric", options=sheet_names, horizontal=True)
 
-    metric_filter = st.radio("Select Metric", options=list(metric_dict.keys()), horizontal=True)
+    # Read the selected sheet
+    df = pd.read_excel(uploaded_file, sheet_name=metric_filter)
 
-    # -------------------------
-    # Month multi-select
-    # -------------------------
-    month_filter = st.multiselect(
-        "Select Month(s)",
-        options=df[month_col].unique(),
-        default=list(df[month_col].unique())
-    )
+    # Assume:
+    # Column 0 = Cancer Category
+    # Columns 1-5 = Parameters
+    cancer_col = df.columns[0]
+    parameter_cols = list(df.columns[1:])
 
     # -------------------------
-    # Cancer Category Buttons
+    # 3️⃣ Cancer Category Buttons
     # -------------------------
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
@@ -79,41 +58,25 @@ if uploaded_file:
         st.info("Click cancer category button(s) to generate graph or table.")
     else:
         # -------------------------
-        # Filtered Data by Month and Cancer Category
-        # -------------------------
-        df_filtered = df[
-            (df[month_col].isin(month_filter)) &
-            (df[cancer_col].isin(selected_cancer))
-        ]
-
-        # -------------------------
-        # Aggregate metric per Cancer Category
-        # -------------------------
-        rows = []
-        for cancer in selected_cancer:
-            temp = df_filtered[df_filtered[cancer_col] == cancer]
-            row = {"Cancer Category": cancer}
-            for param in parameter_cols:
-                row[param] = metric_dict[metric_filter](temp[param].values)
-            rows.append(row)
-
-        df_metric = pd.DataFrame(rows)
-
-        # -------------------------
-        # View Mode
+        # 4️⃣ View Mode
         # -------------------------
         view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
+        # Filtered Data
+        df_filtered = df[df[cancer_col].isin(selected_cancer)]
+
+        # -------------------------
+        # 5️⃣ Graph
+        # -------------------------
         if view_mode == "Graph":
             st.subheader(f"{metric_filter} by Cancer Category")
-            df_long = df_metric.melt(id_vars=["Cancer Category"],
-                                     value_vars=parameter_cols,
-                                     var_name="Parameter",
-                                     value_name="Value")
+            # Melt parameters to long format
+            df_long = df_filtered.melt(id_vars=[cancer_col], value_vars=parameter_cols,
+                                       var_name="Parameter", value_name="Value")
 
             fig = px.bar(
                 df_long,
-                y="Cancer Category",
+                y=cancer_col,
                 x="Value",
                 color="Parameter",
                 orientation="h",
@@ -135,13 +98,16 @@ if uploaded_file:
                 mime="text/html"
             )
 
+        # -------------------------
+        # 6️⃣ Table
+        # -------------------------
         else:
             st.subheader(f"Data Table for {metric_filter}")
-            st.dataframe(df_metric, height=500)
+            st.dataframe(df_filtered, height=500)
 
             # CSV download
             csv_buffer = io.StringIO()
-            df_metric.to_csv(csv_buffer, index=False)
+            df_filtered.to_csv(csv_buffer, index=False)
             st.download_button(
                 label="Download CSV",
                 data=csv_buffer.getvalue(),
