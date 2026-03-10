@@ -1,4 +1,4 @@
-# app_oncology_dashboard_fixed.py
+# app_oncology_dashboard_revamp.py
 
 import streamlit as st
 import pandas as pd
@@ -8,7 +8,7 @@ import io
 
 st.set_page_config(page_title="Oncology Interactive Dashboard", layout="wide")
 st.title("Oncology Metrics Dashboard")
-st.markdown("Upload your Excel file and map the relevant columns. The dashboard will generate a fully interactive chart.")
+st.markdown("Upload your Excel file, map columns, and generate an interactive dashboard. Export as HTML for sharing.")
 
 # -------------------------
 # 1️⃣ Upload File
@@ -19,7 +19,7 @@ if uploaded_file:
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
-    
+
     st.success("File uploaded successfully!")
     st.dataframe(df.head())
 
@@ -29,7 +29,7 @@ if uploaded_file:
     st.subheader("Map Columns")
     cancer_col = st.selectbox("Select Cancer Category column", df.columns)
     month_col = st.selectbox("Select Month column", df.columns)
-    
+
     metric_cols = st.multiselect(
         "Select Metric Columns",
         df.columns,
@@ -45,10 +45,16 @@ if uploaded_file:
     if len(metric_cols) == 0:
         st.warning("Please select at least one metric column.")
     else:
-        st.success("Column mapping complete. Generating interactive dashboard...")
+        st.success("Column mapping complete. Preparing dashboard...")
 
         # -------------------------
-        # 3️⃣ Prepare Metrics Table (Fixed)
+        # 3️⃣ Ensure metrics are numeric
+        # -------------------------
+        for col in metric_cols:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # -------------------------
+        # 4️⃣ Compute Metrics
         # -------------------------
         metrics_dict = {
             "Mean": lambda x: np.mean(x),
@@ -59,7 +65,6 @@ if uploaded_file:
         }
 
         rows = []
-
         for param in metric_cols:
             for metric_name, func in metrics_dict.items():
                 grouped = df.groupby([cancer_col, month_col])[param].apply(func).reset_index(name="Value")
@@ -73,11 +78,10 @@ if uploaded_file:
         st.dataframe(final_df.head(10))
 
         # -------------------------
-        # 4️⃣ Interactive Filters
+        # 5️⃣ Interactive Filters
         # -------------------------
-        st.subheader("Interactive Dashboard Preview")
+        st.subheader("Interactive Dashboard")
 
-        # Default selections
         default_metric = "Mean"
         default_months = final_df[month_col].unique().tolist()
         default_cancer = final_df[cancer_col].unique().tolist()
@@ -93,7 +97,7 @@ if uploaded_file:
         ]
 
         # -------------------------
-        # 5️⃣ Plotly Interactive Chart
+        # 6️⃣ Plotly Grouped Bar Chart
         # -------------------------
         fig = px.bar(
             df_filtered,
@@ -118,15 +122,14 @@ if uploaded_file:
         st.plotly_chart(fig, use_container_width=True)
 
         # -------------------------
-        # 6️⃣ Export Interactive HTML
+        # 7️⃣ Export Interactive HTML
         # -------------------------
-        st.subheader("Download Interactive Dashboard (HTML)")
-
+        st.subheader("Download Interactive HTML")
         buffer = io.BytesIO()
         fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
 
         st.download_button(
-            label="Download Interactive HTML",
+            label="Download HTML Dashboard",
             data=buffer.getvalue(),
             file_name=f"Oncology_Dashboard_{metric_filter}.html",
             mime="text/html"
