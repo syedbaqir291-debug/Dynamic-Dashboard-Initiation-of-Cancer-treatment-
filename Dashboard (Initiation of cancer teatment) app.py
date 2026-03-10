@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final.py
+# app_oncology_dashboard_final_v2.py
 
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ import io
 # -------------------------
 # 1️⃣ Page Config
 # -------------------------
-st.set_page_config(page_title="Oncology Dashboard", layout="wide")
+st.set_page_config(page_title="Oncology Dashboard by QPSD SKMCH & RC", layout="wide")
 st.title("Oncology Interactive Dashboard")
 
 # -------------------------
@@ -37,25 +37,26 @@ if uploaded_file:
         "Number of days"
     ]
 
-    # Ensure numeric columns
+    # Ensure numeric columns and NaNs
     for col in metric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
     # -------------------------
-    # 4️⃣ Compute Metrics
+    # 4️⃣ Compute Metrics (Excel-compatible)
     # -------------------------
     metrics_dict = {
-        "Mean": lambda x: np.mean(x),
-        "Median": lambda x: np.median(x),
-        "SD": lambda x: np.std(x, ddof=0),
-        "Max": lambda x: np.max(x),
-        "Min": lambda x: np.min(x)
+        "Mean": lambda x: np.nanmean(x),       # Excel AVERAGE
+        "Median": lambda x: np.nanmedian(x),   # Excel MEDIAN
+        "SD": lambda x: np.nanstd(x, ddof=1),  # Excel STDEV.S (sample SD)
+        "Max": lambda x: np.nanmax(x),
+        "Min": lambda x: np.nanmin(x)
     }
 
     rows = []
     for param in metric_cols:
         for metric_name, func in metrics_dict.items():
             grouped = df.groupby([cancer_col, month_col])[param].apply(func).reset_index(name="Value")
+            grouped["Value"] = grouped["Value"].round(2)  # Round like Excel
             grouped["Parameter"] = param
             grouped["Metric"] = metric_name
             rows.append(grouped)
@@ -92,7 +93,6 @@ if uploaded_file:
 
     selected_cancer = st.session_state.selected_cancer
 
-    # Show info if no cancer category selected
     if not selected_cancer:
         st.info("Click on Cancer Category button(s) to generate graph or table.")
     else:
@@ -125,7 +125,6 @@ if uploaded_file:
                 color_discrete_sequence=px.colors.qualitative.Plotly,
                 title=f"{metric_filter} by Cancer Category"
             )
-            # Font size adjustments
             fig.update_layout(
                 xaxis_title=metric_filter,
                 yaxis_title="Cancer Category",
@@ -138,7 +137,7 @@ if uploaded_file:
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
 
-            # HTML Export fix using StringIO
+            # HTML Export
             buffer = io.StringIO()
             fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
             st.download_button(
@@ -147,7 +146,7 @@ if uploaded_file:
                 file_name=f"Oncology_Dashboard_{metric_filter}.html",
                 mime="text/html"
             )
-        else:  # Table view
+        else:
             st.subheader(f"Data Table: {metric_filter}")
             st.dataframe(
                 df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
@@ -161,4 +160,5 @@ if uploaded_file:
                 data=csv_buffer.getvalue(),
                 file_name=f"Oncology_Dashboard_{metric_filter}.csv",
                 mime="text/csv"
+            )
             )
