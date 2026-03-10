@@ -1,4 +1,4 @@
-# app_oncology_dashboard_v5.py
+# app_oncology_dashboard_v5_fixed.py
 
 import streamlit as st
 import pandas as pd
@@ -53,7 +53,10 @@ if uploaded_file:
     grouped_all = df.groupby([cancer_col, month_col]).agg(agg_dict)
 
     # Flatten MultiIndex columns
-    grouped_all.columns = ['_'.join([col[0], col[1].__name__ if hasattr(col[1], '__name__') else 'SD']) for col in grouped_all.columns]
+    grouped_all.columns = [
+        f"{col[0]}_{col[1].__name__ if hasattr(col[1], '__name__') else 'SD'}"
+        for col in grouped_all.columns
+    ]
     grouped_all = grouped_all.reset_index()
 
     # -------------------------
@@ -65,10 +68,21 @@ if uploaded_file:
         var_name="Parameter_Metric",
         value_name="Value"
     )
-    # Split "Parameter_Metric" into Parameter and Metric
+
+    # Split into Parameter + Metric
     final_df[['Parameter', 'Metric']] = final_df['Parameter_Metric'].str.rsplit('_', n=1, expand=True)
-    final_df['Value'] = final_df['Value'].round(2)
     final_df = final_df.drop(columns=['Parameter_Metric'])
+
+    # Rename metrics to friendly names
+    metric_name_map = {
+        'nanmean': 'Mean',
+        'nanmedian': 'Median',
+        'SD': 'SD',
+        'nanmax': 'Max',
+        'nanmin': 'Min'
+    }
+    final_df['Metric'] = final_df['Metric'].map(metric_name_map)
+    final_df['Value'] = final_df['Value'].round(2)
 
     # -------------------------
     # 7️⃣ Controls
@@ -77,8 +91,7 @@ if uploaded_file:
 
     metric_filter = st.radio(
         "Select Metric",
-        options=["nanmean", "nanmedian", "SD", "nanmax", "nanmin"],
-        format_func=lambda x: {'nanmean':'Mean','nanmedian':'Median','SD':'SD','nanmax':'Max','nanmin':'Min'}[x],
+        options=["Mean", "Median", "SD", "Max", "Min"],
         horizontal=True
     )
 
@@ -96,7 +109,7 @@ if uploaded_file:
     num_per_row = 6
     for i in range(0, len(cancer_options), num_per_row):
         cols = st.columns(num_per_row)
-        for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
+        for j, cancer in enumerate(cancer_options[i:i + num_per_row]):
             if cols[j].button(cancer):
                 if cancer in st.session_state.selected_cancer:
                     st.session_state.selected_cancer.remove(cancer)
@@ -114,6 +127,7 @@ if uploaded_file:
             horizontal=True
         )
 
+        # Filter data for selected metric, months, and cancer categories
         df_filtered = final_df[
             (final_df["Metric"] == metric_filter) &
             (final_df[month_col].isin(month_filter)) &
