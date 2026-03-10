@@ -1,4 +1,4 @@
-# app_oncology_dashboard_persistent.py
+# app_oncology_dashboard_final.py
 
 import streamlit as st
 import pandas as pd
@@ -79,13 +79,11 @@ if uploaded_file:
 
     # Cancer Category Buttons (compact 2 rows)
     st.markdown("**Select Cancer Category(s)** (click to toggle)")
-
     cancer_options = list(final_df[cancer_col].unique())
     num_per_row = 6
     for i in range(0, len(cancer_options), num_per_row):
         cols = st.columns(num_per_row)
         for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
-            # Toggle selection in session state
             if cols[j].button(cancer):
                 if cancer in st.session_state.selected_cancer:
                     st.session_state.selected_cancer.remove(cancer)
@@ -140,8 +138,8 @@ if uploaded_file:
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
 
-            # HTML Export
-            buffer = io.BytesIO()
+            # HTML Export fix using StringIO
+            buffer = io.StringIO()
             fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
             st.download_button(
                 label="Download Interactive HTML",
