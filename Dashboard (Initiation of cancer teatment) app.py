@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final_v3.py
+# app_oncology_dashboard_final_v4.py
 
 import streamlit as st
 import pandas as pd
@@ -37,45 +37,63 @@ if uploaded_file:
         "Number of days"
     ]
 
-    # Ensure numeric columns and NaNs
+    # -------------------------
+    # 4️⃣ Robust Numeric Cleanup
+    # -------------------------
     for col in metric_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+        # Convert to string, strip spaces, remove non-numeric characters, convert to float
+        df[col] = df[col].astype(str).str.strip()
+        df[col] = pd.to_numeric(df[col].replace(r'[^\d.]', '', regex=True), errors='coerce')
 
     # -------------------------
-    # 4️⃣ Compute Metrics (Excel-compatible)
+    # 5️⃣ Aggregate metrics per cancer + month
     # -------------------------
-    metrics_dict = {
-        "Mean": lambda x: np.nanmean(x),       # Excel AVERAGE
-        "Median": lambda x: np.nanmedian(x),   # Excel MEDIAN
-        "SD": lambda x: np.nanstd(x, ddof=1),  # Excel STDEV.S (sample SD)
-        "Max": lambda x: np.nanmax(x),
-        "Min": lambda x: np.nanmin(x)
-    }
+    grouped_all = df.groupby([cancer_col, month_col])[metric_cols].agg(
+        Mean=lambda x: np.nanmean(x),
+        Median=lambda x: np.nanmedian(x),
+        SD=lambda x: np.nanstd(x, ddof=1),
+        Max=lambda x: np.nanmax(x),
+        Min=lambda x: np.nanmin(x)
+    ).reset_index()
 
-    rows = []
+    # -------------------------
+    # 6️⃣ Reshape for dashboard
+    # -------------------------
+    # Rename columns to include metric type for melting
+    long_rows = []
     for param in metric_cols:
-        for metric_name, func in metrics_dict.items():
-            grouped = df.groupby([cancer_col, month_col])[param].apply(func).reset_index(name="Value")
-            grouped["Value"] = grouped["Value"].round(2)  # Round like Excel
-            grouped["Parameter"] = param
-            grouped["Metric"] = metric_name
-            rows.append(grouped)
+        temp = grouped_all[[cancer_col, month_col, param]].copy()
+        temp_mean = grouped_all[[cancer_col, month_col, param]].copy()
+        temp_melt = pd.DataFrame({
+            cancer_col: grouped_all[cancer_col],
+            month_col: grouped_all[month_col],
+            "Parameter": param,
+            "Mean": grouped_all[param].apply(np.nanmean),
+            "Median": grouped_all[param].apply(np.nanmedian),
+            "SD": grouped_all[param].apply(lambda x: np.nanstd([x], ddof=1) if not np.isnan(x) else np.nan),
+            "Max": grouped_all[param],
+            "Min": grouped_all[param]
+        })
+        long_rows.append(temp_melt)
 
-    final_df = pd.concat(rows, ignore_index=True)
+    final_df = pd.concat(long_rows, ignore_index=True)
+
+    # Round values to 2 decimals
+    final_df[["Mean", "Median", "SD", "Max", "Min"]] = final_df[["Mean", "Median", "SD", "Max", "Min"]].round(2)
 
     # -------------------------
-    # 5️⃣ Controls
+    # 7️⃣ Controls
     # -------------------------
     st.subheader("Controls")
 
-    # Metric Buttons
+    # Metric Selector
     metric_filter = st.radio(
         "Select Metric",
-        options=final_df["Metric"].unique(),
+        options=["Mean", "Median", "SD", "Max", "Min"],
         horizontal=True
     )
 
-    # Month Multi-select
+    # Month multi-select
     month_filter = st.multiselect(
         "Select Month(s)",
         options=final_df[month_col].unique(),
@@ -92,7 +110,7 @@ if uploaded_file:
     num_per_row = 6
     for i in range(0, len(cancer_options), num_per_row):
         cols = st.columns(num_per_row)
-        for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
+        for j, cancer in enumerate(cancer_options[i:i + num_per_row]):
             if cols[j].button(cancer):
                 if cancer in st.session_state.selected_cancer:
                     st.session_state.selected_cancer.remove(cancer)
@@ -104,35 +122,31 @@ if uploaded_file:
     if not selected_cancer:
         st.info("Click on Cancer Category button(s) to generate graph or table.")
     else:
-        # View Toggle
         view_mode = st.radio(
             "View Mode",
             options=["Graph", "Table"],
             horizontal=True
         )
 
-        # -------------------------
-        # 6️⃣ Filtered Data
-        # -------------------------
+        # Filter data for dashboard
         df_filtered = final_df[
-            (final_df["Metric"] == metric_filter) &
             (final_df[month_col].isin(month_filter)) &
             (final_df[cancer_col].isin(selected_cancer))
         ]
 
         # -------------------------
-        # 7️⃣ Graph or Table
+        # 8️⃣ Graph or Table
         # -------------------------
         if view_mode == "Graph":
             st.subheader(f"{metric_filter} of Parameters by Cancer Category")
             fig = px.bar(
                 df_filtered,
                 y=cancer_col,
-                x="Value",
+                x=metric_filter,
                 color="Parameter",
                 orientation='h',
                 barmode="group",
-                text="Value",
+                text=metric_filter,
                 template="plotly_white",
                 color_discrete_sequence=px.colors.qualitative.Plotly,
                 title=f"{metric_filter} by Cancer Category"
@@ -149,7 +163,7 @@ if uploaded_file:
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
             st.plotly_chart(fig, use_container_width=True)
 
-            # HTML Export
+            # Download HTML
             buffer = io.StringIO()
             fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
             st.download_button(
@@ -158,14 +172,13 @@ if uploaded_file:
                 file_name=f"Oncology_Dashboard_{metric_filter}.html",
                 mime="text/html"
             )
-
         else:
             st.subheader(f"Data Table: {metric_filter}")
             st.dataframe(
-                df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
+                df_filtered[[cancer_col, month_col, "Parameter", metric_filter]].sort_values(by=cancer_col),
                 height=500
             )
-            # CSV download
+            # Download CSV
             csv_buffer = io.StringIO()
             df_filtered.to_csv(csv_buffer, index=False)
             st.download_button(
