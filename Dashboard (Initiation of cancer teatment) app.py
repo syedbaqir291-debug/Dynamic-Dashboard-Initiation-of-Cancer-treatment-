@@ -6,7 +6,7 @@ import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard")
+st.title("Oncology Dashboard SKMC & RC")
 
 # Upload raw Excel
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
