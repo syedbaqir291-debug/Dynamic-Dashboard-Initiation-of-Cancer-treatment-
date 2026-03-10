@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final_v2.py
+# app_oncology_dashboard_final_v3.py
 
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ import io
 # -------------------------
 # 1️⃣ Page Config
 # -------------------------
-st.set_page_config(page_title="Oncology Dashboard by QPSD SKMCH & RC", layout="wide")
+st.set_page_config(page_title="Oncology Dashboard", layout="wide")
 st.title("Oncology Interactive Dashboard")
 
 # -------------------------
@@ -69,10 +69,18 @@ if uploaded_file:
     st.subheader("Controls")
 
     # Metric Buttons
-    metric_filter = st.radio("Select Metric", options=final_df["Metric"].unique(), horizontal=True)
+    metric_filter = st.radio(
+        "Select Metric",
+        options=final_df["Metric"].unique(),
+        horizontal=True
+    )
 
     # Month Multi-select
-    month_filter = st.multiselect("Select Month(s)", options=final_df[month_col].unique(), default=final_df[month_col].unique())
+    month_filter = st.multiselect(
+        "Select Month(s)",
+        options=final_df[month_col].unique(),
+        default=final_df[month_col].unique()
+    )
 
     # Initialize session state for selected cancer categories
     if "selected_cancer" not in st.session_state:
@@ -97,7 +105,11 @@ if uploaded_file:
         st.info("Click on Cancer Category button(s) to generate graph or table.")
     else:
         # View Toggle
-        view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
+        view_mode = st.radio(
+            "View Mode",
+            options=["Graph", "Table"],
+            horizontal=True
+        )
 
         # -------------------------
         # 6️⃣ Filtered Data
@@ -146,6 +158,7 @@ if uploaded_file:
                 file_name=f"Oncology_Dashboard_{metric_filter}.html",
                 mime="text/html"
             )
+
         else:
             st.subheader(f"Data Table: {metric_filter}")
             st.dataframe(
@@ -160,5 +173,4 @@ if uploaded_file:
                 data=csv_buffer.getvalue(),
                 file_name=f"Oncology_Dashboard_{metric_filter}.csv",
                 mime="text/csv"
-            )
             )
