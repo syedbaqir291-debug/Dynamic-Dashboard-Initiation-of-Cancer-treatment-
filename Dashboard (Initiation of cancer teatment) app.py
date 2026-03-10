@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final_buttons.py
+# app_oncology_dashboard_buttongrid.py
 
 import streamlit as st
 import pandas as pd
@@ -73,77 +73,85 @@ if uploaded_file:
     # Month Multi-select
     month_filter = st.multiselect("Select Month(s)", options=final_df[month_col].unique(), default=final_df[month_col].unique())
 
-    # Cancer Category Buttons (multi-select style)
-    st.markdown("**Select Cancer Category(s)**")
-    cancer_options = final_df[cancer_col].unique()
-    cancer_selected = st.multiselect("", options=cancer_options, default=list(cancer_options))
+    # Cancer Category Buttons (compact 2 rows)
+    st.markdown("**Select Cancer Category(s)** (click to generate graph)")
 
-    # View Toggle
-    view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
+    cancer_options = list(final_df[cancer_col].unique())
+    selected_cancer = []
 
-    # -------------------------
-    # 6️⃣ Filtered Data
-    # -------------------------
-    df_filtered = final_df[
-        (final_df["Metric"] == metric_filter) &
-        (final_df[month_col].isin(month_filter)) &
-        (final_df[cancer_col].isin(cancer_selected))
-    ]
+    # Two rows of buttons
+    num_per_row = 6
+    for i in range(0, len(cancer_options), num_per_row):
+        cols = st.columns(num_per_row)
+        for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
+            if cols[j].button(cancer):
+                selected_cancer.append(cancer)
 
-    # -------------------------
-    # 7️⃣ Graph or Table
-    # -------------------------
-    if view_mode == "Graph":
-        st.subheader(f"{metric_filter} of Parameters by Cancer Category")
-        fig = px.bar(
-            df_filtered,
-            y=cancer_col,
-            x="Value",
-            color="Parameter",
-            orientation='h',
-            barmode="group",
-            text="Value",
-            template="plotly_white",
-            color_discrete_sequence=px.colors.qualitative.Plotly,
-            title=f"{metric_filter} by Cancer Category"
-        )
-        # Font size adjustments (all ≥12)
-        fig.update_layout(
-            xaxis_title=metric_filter,
-            yaxis_title="Cancer Category",
-            xaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
-            yaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
-            legend=dict(font=dict(size=12)),
-            height=600,
-            margin=dict(l=50, r=50, t=80, b=50)
-        )
-        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+    # Only generate graph/table if at least one cancer category is selected
+    if selected_cancer:
+        # View Toggle
+        view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
-        st.plotly_chart(fig, use_container_width=True)
+        # -------------------------
+        # 6️⃣ Filtered Data
+        # -------------------------
+        df_filtered = final_df[
+            (final_df["Metric"] == metric_filter) &
+            (final_df[month_col].isin(month_filter)) &
+            (final_df[cancer_col].isin(selected_cancer))
+        ]
 
-        # HTML Export
-        buffer = io.BytesIO()
-        fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
-        st.download_button(
-            label="Download Interactive HTML",
-            data=buffer.getvalue(),
-            file_name=f"Oncology_Dashboard_{metric_filter}.html",
-            mime="text/html"
-        )
+        # -------------------------
+        # 7️⃣ Graph or Table
+        # -------------------------
+        if view_mode == "Graph":
+            st.subheader(f"{metric_filter} of Parameters by Cancer Category")
+            fig = px.bar(
+                df_filtered,
+                y=cancer_col,
+                x="Value",
+                color="Parameter",
+                orientation='h',
+                barmode="group",
+                text="Value",
+                template="plotly_white",
+                color_discrete_sequence=px.colors.qualitative.Plotly,
+                title=f"{metric_filter} by Cancer Category"
+            )
+            # Font size adjustments
+            fig.update_layout(
+                xaxis_title=metric_filter,
+                yaxis_title="Cancer Category",
+                xaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
+                yaxis=dict(title_font=dict(size=12), tickfont=dict(size=12)),
+                legend=dict(font=dict(size=12)),
+                height=600,
+                margin=dict(l=50, r=50, t=80, b=50)
+            )
+            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
 
-    else:  # Table view
-        st.subheader(f"Data Table: {metric_filter}")
-        st.dataframe(
-            df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
-            height=500
-        )
-
-        # Optional CSV download
-        csv_buffer = io.StringIO()
-        df_filtered.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="Download Table CSV",
-            data=csv_buffer.getvalue(),
-            file_name=f"Oncology_Dashboard_{metric_filter}.csv",
-            mime="text/csv"
-        )
+            # HTML Export
+            buffer = io.BytesIO()
+            fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
+            st.download_button(
+                label="Download Interactive HTML",
+                data=buffer.getvalue(),
+                file_name=f"Oncology_Dashboard_{metric_filter}.html",
+                mime="text/html"
+            )
+        else:  # Table view
+            st.subheader(f"Data Table: {metric_filter}")
+            st.dataframe(
+                df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
+                height=500
+            )
+            # CSV download
+            csv_buffer = io.StringIO()
+            df_filtered.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="Download Table CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"Oncology_Dashboard_{metric_filter}.csv",
+                mime="text/csv"
+            )
