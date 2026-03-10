@@ -1,8 +1,7 @@
-# oncology_dashboard_real_time_download.py
+# oncology_dashboard_raw_metrics.py
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import io
 
@@ -16,7 +15,7 @@ if uploaded_file:
 
     df = pd.read_excel(uploaded_file)
 
-    # Columns in your dataset
+    # Columns
     month_col = "Month"
     cancer_col = "Cancer Category"
     parameter_cols = [
@@ -27,7 +26,7 @@ if uploaded_file:
         "Number of days"
     ]
 
-    # Ensure parameters are numeric
+    # Ensure numeric for parameters
     for col in parameter_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -64,7 +63,7 @@ if uploaded_file:
 
     if selected_cancer:
 
-        # Filter by month and cancer
+        # Filter by month and selected cancers
         filtered = df[
             (df[month_col].isin(months)) &
             (df[cancer_col].isin(selected_cancer))
@@ -77,18 +76,20 @@ if uploaded_file:
             row = {"Cancer Category": cancer}
 
             for param in parameter_cols:
-                data = temp[param].dropna()
+                data = temp[param].dropna()  # Use all raw data
 
+                # Compute metrics faithfully
                 if metric == "Mean":
-                    value = data.mean()
+                    value = data.mean() if not data.empty else 0
                 elif metric == "Median":
-                    value = data.median()
+                    value = data.median() if not data.empty else 0
                 elif metric == "SD":
-                    value = data.std()
+                    value = data.std() if len(data) > 1 else 0
                 elif metric == "Maximum":
-                    value = data.max()
+                    value = data.max() if not data.empty else 0
                 elif metric == "Minimum":
-                    value = data.min()
+                    value = data.min() if not data.empty else 0
+
                 row[param] = value
 
             results.append(row)
@@ -114,7 +115,7 @@ if uploaded_file:
                 orientation="h",
                 text="Value",
                 barmode="group",
-                title=f"{metric} by Cancer Category"
+                title=f"{metric} by Cancer Category (Raw Data)"
             )
 
             st.plotly_chart(fig, use_container_width=True)
