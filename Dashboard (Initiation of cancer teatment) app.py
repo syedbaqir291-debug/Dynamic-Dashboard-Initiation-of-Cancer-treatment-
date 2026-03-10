@@ -1,116 +1,135 @@
-# oncology_dashboard_multi_sheet.py
+# oncology_dashboard_correct_logic.py
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard SKMCH & RC )")
+st.title("Oncology Dashboard by QPSD SKMCH & RC")
 
-# -------------------------
-# 1️⃣ Upload Excel
-# -------------------------
-uploaded_file = st.file_uploader("Upload Excel Workbook with Precomputed Metrics", type=["xlsx"])
+# Upload file
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
 if uploaded_file:
-    # Load all sheets
-    xl = pd.ExcelFile(uploaded_file)
-    sheet_names = xl.sheet_names  # ["Mean", "Median", "Standard Deviation", "Maximum", "Minimum"]
 
-    st.success(f"Workbook loaded with sheets: {sheet_names}")
+    df = pd.read_excel(uploaded_file)
 
-    # -------------------------
-    # 2️⃣ Metric selection (Sheet name)
-    # -------------------------
-    metric_filter = st.radio("Select Metric", options=sheet_names, horizontal=True)
+    # Columns
+    month_col = df.columns[0]
+    cancer_col = df.columns[1]
+    parameter_cols = list(df.columns[2:])
 
-    # Read the selected sheet
-    df = pd.read_excel(uploaded_file, sheet_name=metric_filter)
+    # Ensure numeric
+    for col in parameter_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Assume:
-    # Column 0 = Cancer Category
-    # Columns 1-5 = Parameters
-    cancer_col = df.columns[0]
-    parameter_cols = list(df.columns[1:])
+    # Metric selector
+    metric = st.radio(
+        "Select Metric",
+        ["Mean", "Median", "SD", "Maximum", "Minimum"],
+        horizontal=True
+    )
 
-    # -------------------------
-    # 3️⃣ Cancer Category Buttons
-    # -------------------------
+    # Month filter
+    months = st.multiselect(
+        "Select Month",
+        options=df[month_col].unique(),
+        default=df[month_col].unique()
+    )
+
+    # Cancer category buttons
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
 
-    st.markdown("**Select Cancer Category(s)**")
-    cancer_options = list(df[cancer_col].unique())
-    num_per_row = 6
-    for i in range(0, len(cancer_options), num_per_row):
-        cols = st.columns(num_per_row)
-        for j, cancer in enumerate(cancer_options[i:i + num_per_row]):
-            if cols[j].button(cancer):
-                if cancer in st.session_state.selected_cancer:
-                    st.session_state.selected_cancer.remove(cancer)
-                else:
-                    st.session_state.selected_cancer.append(cancer)
+    cancers = df[cancer_col].unique()
+
+    st.markdown("### Select Cancer Category")
+
+    cols = st.columns(5)
+
+    for i, cancer in enumerate(cancers):
+        if cols[i % 5].button(cancer):
+            if cancer in st.session_state.selected_cancer:
+                st.session_state.selected_cancer.remove(cancer)
+            else:
+                st.session_state.selected_cancer.append(cancer)
 
     selected_cancer = st.session_state.selected_cancer
 
-    if not selected_cancer:
-        st.info("Click cancer category button(s) to generate graph or table.")
-    else:
-        # -------------------------
-        # 4️⃣ View Mode
-        # -------------------------
-        view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
+    if selected_cancer:
 
-        # Filtered Data
-        df_filtered = df[df[cancer_col].isin(selected_cancer)]
+        # Apply filters
+        filtered = df[
+            (df[month_col].isin(months)) &
+            (df[cancer_col].isin(selected_cancer))
+        ]
 
-        # -------------------------
-        # 5️⃣ Graph
-        # -------------------------
-        if view_mode == "Graph":
-            st.subheader(f"{metric_filter} by Cancer Category")
-            # Melt parameters to long format
-            df_long = df_filtered.melt(id_vars=[cancer_col], value_vars=parameter_cols,
-                                       var_name="Parameter", value_name="Value")
+        results = []
+
+        for cancer in selected_cancer:
+
+            temp = filtered[filtered[cancer_col] == cancer]
+
+            row = {"Cancer Category": cancer}
+
+            for param in parameter_cols:
+
+                column_data = temp[param].dropna()
+
+                if metric == "Maximum":
+                    value = column_data.max()
+
+                elif metric == "Minimum":
+                    value = column_data.min()
+
+                elif metric == "Mean":
+                    value = column_data.mean()
+
+                elif metric == "Median":
+                    value = column_data.median()
+
+                elif metric == "SD":
+                    value = column_data.std()
+
+                row[param] = value
+
+            results.append(row)
+
+        result_df = pd.DataFrame(results)
+
+        view = st.radio("View", ["Graph", "Table"], horizontal=True)
+
+        if view == "Graph":
+
+            long_df = result_df.melt(
+                id_vars="Cancer Category",
+                var_name="Parameter",
+                value_name="Value"
+            )
 
             fig = px.bar(
-                df_long,
-                y=cancer_col,
+                long_df,
+                y="Cancer Category",
                 x="Value",
                 color="Parameter",
                 orientation="h",
-                barmode="group",
                 text="Value",
-                template="plotly_white",
-                title=f"{metric_filter} by Cancer Category"
+                barmode="group"
             )
-            fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+
             st.plotly_chart(fig, use_container_width=True)
 
-            # Download HTML
             buffer = io.StringIO()
-            fig.write_html(buffer, include_plotlyjs="cdn", full_html=True)
+            fig.write_html(buffer)
+
             st.download_button(
-                label="Download Interactive HTML",
-                data=buffer.getvalue(),
-                file_name=f"Oncology_{metric_filter}.html",
+                "Download Interactive HTML",
+                buffer.getvalue(),
+                file_name="oncology_dashboard.html",
                 mime="text/html"
             )
 
-        # -------------------------
-        # 6️⃣ Table
-        # -------------------------
         else:
-            st.subheader(f"Data Table for {metric_filter}")
-            st.dataframe(df_filtered, height=500)
-
-            # CSV download
-            csv_buffer = io.StringIO()
-            df_filtered.to_csv(csv_buffer, index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv_buffer.getvalue(),
-                file_name=f"Oncology_{metric_filter}.csv",
-                mime="text/csv"
-            )
+            st.dataframe(result_df)
