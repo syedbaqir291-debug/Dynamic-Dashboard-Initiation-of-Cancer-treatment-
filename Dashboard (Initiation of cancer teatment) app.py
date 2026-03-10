@@ -1,4 +1,4 @@
-# oncology_dashboard_multi_sheet.py
+# oncology_dashboard_multi_sheet_v2.py
 
 import streamlit as st
 import pandas as pd
@@ -6,7 +6,7 @@ import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard by QPSD SKMCH & RC")
+st.title("Oncology Dashboard (Precomputed Metrics, Multi-Month)")
 
 # -------------------------
 # 1️⃣ Upload Excel
@@ -28,14 +28,24 @@ if uploaded_file:
     # Read the selected sheet
     df = pd.read_excel(uploaded_file, sheet_name=metric_filter)
 
-    # Assume:
-    # Column 0 = Cancer Category
-    # Columns 1-5 = Parameters
-    cancer_col = df.columns[0]
-    parameter_cols = list(df.columns[1:])
+    # -------------------------
+    # Columns
+    # -------------------------
+    month_col = df.columns[0]
+    cancer_col = df.columns[1]
+    parameter_cols = list(df.columns[2:])
 
     # -------------------------
-    # 3️⃣ Cancer Category Buttons
+    # 3️⃣ Month Multi-select
+    # -------------------------
+    month_filter = st.multiselect(
+        "Select Month(s)",
+        options=df[month_col].unique(),
+        default=list(df[month_col].unique())
+    )
+
+    # -------------------------
+    # 4️⃣ Cancer Category Buttons
     # -------------------------
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
@@ -58,20 +68,20 @@ if uploaded_file:
         st.info("Click cancer category button(s) to generate graph or table.")
     else:
         # -------------------------
-        # 4️⃣ View Mode
+        # 5️⃣ View Mode
         # -------------------------
         view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
         # Filtered Data
-        df_filtered = df[df[cancer_col].isin(selected_cancer)]
+        df_filtered = df[(df[month_col].isin(month_filter)) & (df[cancer_col].isin(selected_cancer))]
 
         # -------------------------
-        # 5️⃣ Graph
+        # 6️⃣ Graph
         # -------------------------
         if view_mode == "Graph":
             st.subheader(f"{metric_filter} by Cancer Category")
             # Melt parameters to long format
-            df_long = df_filtered.melt(id_vars=[cancer_col], value_vars=parameter_cols,
+            df_long = df_filtered.melt(id_vars=[month_col, cancer_col], value_vars=parameter_cols,
                                        var_name="Parameter", value_name="Value")
 
             fig = px.bar(
@@ -99,15 +109,16 @@ if uploaded_file:
             )
 
         # -------------------------
-        # 6️⃣ Table
+        # 7️⃣ Table
         # -------------------------
         else:
             st.subheader(f"Data Table for {metric_filter}")
-            st.dataframe(df_filtered, height=500)
+            st.dataframe(df_filtered[[month_col, cancer_col] + parameter_cols].sort_values(by=[month_col, cancer_col]),
+                         height=500)
 
             # CSV download
             csv_buffer = io.StringIO()
-            df_filtered.to_csv(csv_buffer, index=False)
+            df_filtered[[month_col, cancer_col] + parameter_cols].to_csv(csv_buffer, index=False)
             st.download_button(
                 label="Download CSV",
                 data=csv_buffer.getvalue(),
