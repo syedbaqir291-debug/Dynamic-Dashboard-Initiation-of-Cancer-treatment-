@@ -1,4 +1,4 @@
-# app_oncology_dashboard_auto.py
+# app_oncology_dashboard_layout.py
 
 import streamlit as st
 import pandas as pd
@@ -8,24 +8,18 @@ import io
 
 st.set_page_config(page_title="Oncology Interactive Dashboard", layout="wide")
 st.title("Oncology Metrics Dashboard")
-st.markdown("Upload your Excel file. Dashboard will generate automatically using predefined columns.")
 
-# -------------------------
-# 1️⃣ Upload File
-# -------------------------
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "csv"])
 if uploaded_file:
+    # Load file
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
     st.success("File uploaded successfully!")
-    st.dataframe(df.head())
 
-    # -------------------------
-    # 2️⃣ Fixed Columns
-    # -------------------------
+    # Fixed columns
     cancer_col = "Cancer Category"
     month_col = "Month"
     metric_cols = [
@@ -36,15 +30,11 @@ if uploaded_file:
         "Number of days"
     ]
 
-    # -------------------------
-    # 3️⃣ Ensure metrics are numeric
-    # -------------------------
+    # Ensure numeric metrics
     for col in metric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # -------------------------
-    # 4️⃣ Compute Metrics
-    # -------------------------
+    # Compute metrics
     metrics_dict = {
         "Mean": lambda x: np.mean(x),
         "Median": lambda x: np.median(x),
@@ -64,52 +54,51 @@ if uploaded_file:
     final_df = pd.concat(rows, ignore_index=True)
 
     # -------------------------
-    # 5️⃣ Filters for End User
+    #  Layout: Graph Left 3/4, Controls Right 1/4
     # -------------------------
-    st.subheader("Dashboard Controls")
-    metric_filter = st.selectbox("Select Metric", final_df["Metric"].unique(), index=0)
-    month_filter = st.multiselect("Select Month(s)", final_df[month_col].unique(), default=final_df[month_col].unique())
+    col1, col2 = st.columns([3, 1])
+
+    with col2:
+        st.subheader("Filters / Metric")
+        metric_filter = st.selectbox("Select Metric", final_df["Metric"].unique(), index=0)
+        month_filter = st.multiselect("Select Month(s)", final_df[month_col].unique(), default=final_df[month_col].unique())
 
     df_filtered = final_df[
         (final_df["Metric"] == metric_filter) &
         (final_df[month_col].isin(month_filter))
     ]
 
-    # -------------------------
-    # 6️⃣ Plotly Grouped Bar Chart
-    # -------------------------
-    fig = px.bar(
-        df_filtered,
-        x=cancer_col,
-        y="Value",
-        color="Parameter",
-        barmode="group",
-        text="Value",
-        template="plotly_white",
-        color_discrete_sequence=px.colors.qualitative.Plotly,
-        title=f"{metric_filter} of Parameters by Cancer Category"
-    )
+    with col1:
+        st.subheader(f"Bar Graph: {metric_filter} by Cancer Category")
+        fig = px.bar(
+            df_filtered,
+            x=cancer_col,
+            y="Value",
+            color="Parameter",
+            barmode="group",
+            text="Value",
+            template="plotly_white",
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            title=f"{metric_filter} of Parameters by Cancer Category"
+        )
 
-    fig.update_layout(
-        xaxis_title="Cancer Category",
-        yaxis_title=metric_filter,
-        width=1200,
-        height=600
-    )
-    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig.update_layout(
+            xaxis_title="Cancer Category",
+            yaxis_title=metric_filter,
+            width=1200,
+            height=600
+        )
+        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
 
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # -------------------------
-    # 7️⃣ Export Interactive HTML
-    # -------------------------
-    st.subheader("Download Interactive HTML")
-    buffer = io.BytesIO()
-    fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
+        # HTML Export inside same column
+        buffer = io.BytesIO()
+        fig.write_html(buffer, include_plotlyjs='cdn', full_html=True)
 
-    st.download_button(
-        label="Download HTML Dashboard",
-        data=buffer.getvalue(),
-        file_name=f"Oncology_Dashboard_{metric_filter}.html",
-        mime="text/html"
-    )
+        st.download_button(
+            label="Download Interactive HTML",
+            data=buffer.getvalue(),
+            file_name=f"Oncology_Dashboard_{metric_filter}.html",
+            mime="text/html"
+        )
