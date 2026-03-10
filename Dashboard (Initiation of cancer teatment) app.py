@@ -1,4 +1,4 @@
-# oncology_dashboard_dynamic.py
+# oncology_dashboard_multi_sheet_aggregated.py
 
 import streamlit as st
 import pandas as pd
@@ -7,12 +7,12 @@ import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard (Dynamic Metrics)")
+st.title("Oncology Dashboard (Aggregated Metrics per Cancer Category)")
 
 # -------------------------
-# 1️⃣ Upload raw Excel
+# 1️⃣ Upload Excel
 # -------------------------
-uploaded_file = st.file_uploader("Upload Excel Workbook", type=["xlsx", "csv"])
+uploaded_file = st.file_uploader("Upload Excel Workbook with Precomputed Metrics", type=["xlsx", "csv"])
 
 if uploaded_file:
     if uploaded_file.name.endswith(".csv"):
@@ -25,9 +25,9 @@ if uploaded_file:
     # -------------------------
     # Columns
     # -------------------------
-    month_col = df.columns[0]
-    cancer_col = df.columns[1]
-    parameter_cols = list(df.columns[2:])
+    month_col = df.columns[0]       # Month
+    cancer_col = df.columns[1]      # Cancer Category
+    parameter_cols = list(df.columns[2:])  # Parameters
 
     # Ensure numeric columns
     for col in parameter_cols:
@@ -79,7 +79,7 @@ if uploaded_file:
         st.info("Click cancer category button(s) to generate graph or table.")
     else:
         # -------------------------
-        # Filtered Data
+        # Filtered Data by Month and Cancer Category
         # -------------------------
         df_filtered = df[
             (df[month_col].isin(month_filter)) &
@@ -87,17 +87,17 @@ if uploaded_file:
         ]
 
         # -------------------------
-        # Compute metric
+        # Aggregate metric per Cancer Category
         # -------------------------
         rows = []
-        for param in parameter_cols:
-            value = metric_dict[metric_filter](df_filtered[param].values)
-            rows.append({
-                "Parameter": param,
-                "Value": value
-            })
+        for cancer in selected_cancer:
+            temp = df_filtered[df_filtered[cancer_col] == cancer]
+            row = {"Cancer Category": cancer}
+            for param in parameter_cols:
+                row[param] = metric_dict[metric_filter](temp[param].values)
+            rows.append(row)
 
-        metric_df = pd.DataFrame(rows)
+        df_metric = pd.DataFrame(rows)
 
         # -------------------------
         # View Mode
@@ -105,16 +105,22 @@ if uploaded_file:
         view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
         if view_mode == "Graph":
-            st.subheader(f"{metric_filter} by Parameter")
+            st.subheader(f"{metric_filter} by Cancer Category")
+            df_long = df_metric.melt(id_vars=["Cancer Category"],
+                                     value_vars=parameter_cols,
+                                     var_name="Parameter",
+                                     value_name="Value")
+
             fig = px.bar(
-                metric_df,
+                df_long,
+                y="Cancer Category",
                 x="Value",
-                y="Parameter",
+                color="Parameter",
                 orientation="h",
+                barmode="group",
                 text="Value",
                 template="plotly_white",
-                color="Parameter",
-                title=f"{metric_filter} by Parameter"
+                title=f"{metric_filter} by Cancer Category"
             )
             fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
@@ -128,12 +134,14 @@ if uploaded_file:
                 file_name=f"Oncology_{metric_filter}.html",
                 mime="text/html"
             )
+
         else:
             st.subheader(f"Data Table for {metric_filter}")
-            st.dataframe(metric_df, height=500)
+            st.dataframe(df_metric, height=500)
+
             # CSV download
             csv_buffer = io.StringIO()
-            metric_df.to_csv(csv_buffer, index=False)
+            df_metric.to_csv(csv_buffer, index=False)
             st.download_button(
                 label="Download CSV",
                 data=csv_buffer.getvalue(),
