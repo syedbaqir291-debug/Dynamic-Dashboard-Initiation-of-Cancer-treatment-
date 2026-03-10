@@ -6,7 +6,7 @@ import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard (Precomputed Metrics, Multi-Month)")
+st.title("Oncology Dashboard By QPSD SKMCH & RC")
 
 # -------------------------
 # 1️⃣ Upload Excel
