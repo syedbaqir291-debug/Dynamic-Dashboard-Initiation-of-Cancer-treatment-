@@ -10,7 +10,7 @@ import io
 # 1️⃣ Page Config
 # -------------------------
 st.set_page_config(page_title="Dashboard By QPSD SKMCH & RC", layout="wide")
-st.title("Oncology Interactive Dashboard")
+st.title("Dashboard By QPSD SKMCH & RC")
 
 # -------------------------
 # 2️⃣ File Upload
