@@ -1,4 +1,4 @@
-# oncology_dashboard_correct_logic.py
+# oncology_dashboard_real_time_download.py
 
 import streamlit as st
 import pandas as pd
@@ -9,13 +9,27 @@ import io
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
 st.title("Oncology Dashboard")
 
-# Upload Excel
+# Upload raw Excel
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
 if uploaded_file:
 
-    # Read Excel file structure
-    excel_file = pd.ExcelFile(uploaded_file)
+    df = pd.read_excel(uploaded_file)
+
+    # Columns in your dataset
+    month_col = "Month"
+    cancer_col = "Cancer Category"
+    parameter_cols = [
+        "1st visit - WIC acceptance",
+        "WIC acceptance - 1st OPD visit",
+        "1st OPD visit - MDT",
+        "MDT - 1st day of treatment",
+        "Number of days"
+    ]
+
+    # Ensure parameters are numeric
+    for col in parameter_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Metric selector
     metric = st.radio(
@@ -23,24 +37,6 @@ if uploaded_file:
         ["Mean", "Median", "SD", "Maximum", "Minimum"],
         horizontal=True
     )
-
-    # Sheet selector (NEW)
-    sheet_name = st.selectbox(
-        "Select Data Sheet",
-        excel_file.sheet_names
-    )
-
-    # Read selected sheet
-    df = pd.read_excel(excel_file, sheet_name=sheet_name)
-
-    # Columns
-    month_col = df.columns[0]
-    cancer_col = df.columns[1]
-    parameter_cols = list(df.columns[2:])
-
-    # Ensure numeric
-    for col in parameter_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Month filter
     months = st.multiselect(
@@ -54,9 +50,7 @@ if uploaded_file:
         st.session_state.selected_cancer = []
 
     cancers = df[cancer_col].unique()
-
     st.markdown("### Select Cancer Category")
-
     cols = st.columns(5)
 
     for i, cancer in enumerate(cancers):
@@ -70,7 +64,7 @@ if uploaded_file:
 
     if selected_cancer:
 
-        # Apply filters
+        # Filter by month and cancer
         filtered = df[
             (df[month_col].isin(months)) &
             (df[cancer_col].isin(selected_cancer))
@@ -79,40 +73,33 @@ if uploaded_file:
         results = []
 
         for cancer in selected_cancer:
-
             temp = filtered[filtered[cancer_col] == cancer]
-
             row = {"Cancer Category": cancer}
 
             for param in parameter_cols:
+                data = temp[param].dropna()
 
-                column_data = temp[param].dropna()
-
-                if metric == "Maximum":
-                    value = column_data.max()
-
-                elif metric == "Minimum":
-                    value = column_data.min()
-
-                elif metric == "Mean":
-                    value = column_data.mean()
-
+                if metric == "Mean":
+                    value = data.mean()
                 elif metric == "Median":
-                    value = column_data.median()
-
+                    value = data.median()
                 elif metric == "SD":
-                    value = column_data.std()
-
+                    value = data.std()
+                elif metric == "Maximum":
+                    value = data.max()
+                elif metric == "Minimum":
+                    value = data.min()
                 row[param] = value
 
             results.append(row)
 
         result_df = pd.DataFrame(results)
 
+        # View selector
         view = st.radio("View", ["Graph", "Table"], horizontal=True)
 
         if view == "Graph":
-
+            # Reshape for Plotly
             long_df = result_df.melt(
                 id_vars="Cancer Category",
                 var_name="Parameter",
@@ -126,14 +113,15 @@ if uploaded_file:
                 color="Parameter",
                 orientation="h",
                 text="Value",
-                barmode="group"
+                barmode="group",
+                title=f"{metric} by Cancer Category"
             )
 
             st.plotly_chart(fig, use_container_width=True)
 
+            # Download interactive HTML
             buffer = io.StringIO()
             fig.write_html(buffer)
-
             st.download_button(
                 "Download Interactive HTML",
                 buffer.getvalue(),
