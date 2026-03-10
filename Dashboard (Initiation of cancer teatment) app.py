@@ -1,10 +1,9 @@
-# app_oncology_dashboard_dynamic.py
+# app_oncology_dashboard_fixed.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 import io
 
 st.set_page_config(page_title="Oncology Interactive Dashboard", layout="wide")
@@ -49,24 +48,23 @@ if uploaded_file:
         st.success("Column mapping complete. Generating interactive dashboard...")
 
         # -------------------------
-        # 3️⃣ Prepare Metrics Table
+        # 3️⃣ Prepare Metrics Table (Fixed)
         # -------------------------
-        metrics = ["Mean", "Median", "SD", "Max", "Min"]
+        metrics_dict = {
+            "Mean": lambda x: np.mean(x),
+            "Median": lambda x: np.median(x),
+            "SD": lambda x: np.std(x, ddof=0),
+            "Max": lambda x: np.max(x),
+            "Min": lambda x: np.min(x)
+        }
+
         rows = []
 
         for param in metric_cols:
-            for metric in metrics:
-                grouped = df.groupby([cancer_col, month_col])[param].agg(
-                    Mean=np.mean,
-                    Median=np.median,
-                    SD=lambda x: np.std(x, ddof=0),
-                    Max=np.max,
-                    Min=np.min
-                ).reset_index()
-
-                grouped = grouped[[cancer_col, month_col, metric]].rename(columns={metric: "Value"})
+            for metric_name, func in metrics_dict.items():
+                grouped = df.groupby([cancer_col, month_col])[param].apply(func).reset_index(name="Value")
                 grouped["Parameter"] = param
-                grouped["Metric"] = metric
+                grouped["Metric"] = metric_name
                 rows.append(grouped)
 
         final_df = pd.concat(rows, ignore_index=True)
@@ -75,7 +73,7 @@ if uploaded_file:
         st.dataframe(final_df.head(10))
 
         # -------------------------
-        # 4️⃣ Plotly Interactive Chart
+        # 4️⃣ Interactive Filters
         # -------------------------
         st.subheader("Interactive Dashboard Preview")
 
@@ -84,7 +82,6 @@ if uploaded_file:
         default_months = final_df[month_col].unique().tolist()
         default_cancer = final_df[cancer_col].unique().tolist()
 
-        # Dropdowns / filters for end user
         metric_filter = st.selectbox("Select Metric", final_df["Metric"].unique(), index=0)
         month_filter = st.multiselect("Select Month(s)", final_df[month_col].unique(), default=default_months)
         cancer_filter = st.multiselect("Select Cancer Category(s)", final_df[cancer_col].unique(), default=default_cancer)
@@ -95,7 +92,9 @@ if uploaded_file:
             (final_df[cancer_col].isin(cancer_filter))
         ]
 
-        # Plot grouped bar chart
+        # -------------------------
+        # 5️⃣ Plotly Interactive Chart
+        # -------------------------
         fig = px.bar(
             df_filtered,
             x=cancer_col,
@@ -119,7 +118,7 @@ if uploaded_file:
         st.plotly_chart(fig, use_container_width=True)
 
         # -------------------------
-        # 5️⃣ Export Interactive HTML
+        # 6️⃣ Export Interactive HTML
         # -------------------------
         st.subheader("Download Interactive Dashboard (HTML)")
 
