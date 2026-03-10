@@ -1,4 +1,4 @@
-# app_oncology_dashboard_buttongrid.py
+# app_oncology_dashboard_persistent.py
 
 import streamlit as st
 import pandas as pd
@@ -73,22 +73,31 @@ if uploaded_file:
     # Month Multi-select
     month_filter = st.multiselect("Select Month(s)", options=final_df[month_col].unique(), default=final_df[month_col].unique())
 
+    # Initialize session state for selected cancer categories
+    if "selected_cancer" not in st.session_state:
+        st.session_state.selected_cancer = []
+
     # Cancer Category Buttons (compact 2 rows)
-    st.markdown("**Select Cancer Category(s)** (click to generate graph)")
+    st.markdown("**Select Cancer Category(s)** (click to toggle)")
 
     cancer_options = list(final_df[cancer_col].unique())
-    selected_cancer = []
-
-    # Two rows of buttons
     num_per_row = 6
     for i in range(0, len(cancer_options), num_per_row):
         cols = st.columns(num_per_row)
         for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
+            # Toggle selection in session state
             if cols[j].button(cancer):
-                selected_cancer.append(cancer)
+                if cancer in st.session_state.selected_cancer:
+                    st.session_state.selected_cancer.remove(cancer)
+                else:
+                    st.session_state.selected_cancer.append(cancer)
 
-    # Only generate graph/table if at least one cancer category is selected
-    if selected_cancer:
+    selected_cancer = st.session_state.selected_cancer
+
+    # Show info if no cancer category selected
+    if not selected_cancer:
+        st.info("Click on Cancer Category button(s) to generate graph or table.")
+    else:
         # View Toggle
         view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
