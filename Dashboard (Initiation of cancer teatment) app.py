@@ -1,42 +1,53 @@
-# oncology_dashboard_precomputed_month.py
+# oncology_dashboard_dynamic.py
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import io
 
 st.set_page_config(page_title="Oncology Dashboard", layout="wide")
-st.title("Oncology Dashboard (Precomputed Metrics with Month Filter)")
+st.title("Oncology Dashboard (Dynamic Metrics)")
 
 # -------------------------
-# 1️⃣ Upload Excel
+# 1️⃣ Upload raw Excel
 # -------------------------
-uploaded_file = st.file_uploader("Upload Excel Workbook with Precomputed Metrics", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload Excel Workbook", type=["xlsx", "csv"])
 
 if uploaded_file:
-    # Load all sheets
-    xl = pd.ExcelFile(uploaded_file)
-    sheet_names = xl.sheet_names  # ["Mean", "Median", "SD", "Maximum", "Minimum"]
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
 
-    st.success(f"Workbook loaded with sheets: {sheet_names}")
-
-    # -------------------------
-    # 2️⃣ Metric selection (Sheet name)
-    # -------------------------
-    metric_filter = st.radio("Select Metric", options=sheet_names, horizontal=True)
-
-    # Read the selected sheet
-    df = pd.read_excel(uploaded_file, sheet_name=metric_filter)
+    st.success("File uploaded successfully!")
 
     # -------------------------
     # Columns
     # -------------------------
-    month_col = df.columns[0]       # Month
-    cancer_col = df.columns[1]      # Cancer Category
-    parameter_cols = list(df.columns[2:])  # Parameters
+    month_col = df.columns[0]
+    cancer_col = df.columns[1]
+    parameter_cols = list(df.columns[2:])
+
+    # Ensure numeric columns
+    for col in parameter_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
 
     # -------------------------
-    # 3️⃣ Month Multi-select
+    # Metric selection
+    # -------------------------
+    metric_dict = {
+        "Mean": np.mean,
+        "Median": np.median,
+        "SD": lambda x: np.std(x, ddof=1),
+        "Max": np.max,
+        "Min": np.min
+    }
+
+    metric_filter = st.radio("Select Metric", options=list(metric_dict.keys()), horizontal=True)
+
+    # -------------------------
+    # Month multi-select
     # -------------------------
     month_filter = st.multiselect(
         "Select Month(s)",
@@ -45,7 +56,7 @@ if uploaded_file:
     )
 
     # -------------------------
-    # 4️⃣ Cancer Category Buttons
+    # Cancer Category Buttons
     # -------------------------
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
@@ -68,7 +79,7 @@ if uploaded_file:
         st.info("Click cancer category button(s) to generate graph or table.")
     else:
         # -------------------------
-        # 5️⃣ Filtered Data
+        # Filtered Data
         # -------------------------
         df_filtered = df[
             (df[month_col].isin(month_filter)) &
@@ -76,34 +87,34 @@ if uploaded_file:
         ]
 
         # -------------------------
-        # 6️⃣ View Mode
+        # Compute metric
+        # -------------------------
+        rows = []
+        for param in parameter_cols:
+            value = metric_dict[metric_filter](df_filtered[param].values)
+            rows.append({
+                "Parameter": param,
+                "Value": value
+            })
+
+        metric_df = pd.DataFrame(rows)
+
+        # -------------------------
+        # View Mode
         # -------------------------
         view_mode = st.radio("View Mode", options=["Graph", "Table"], horizontal=True)
 
-        # -------------------------
-        # 7️⃣ Graph
-        # -------------------------
         if view_mode == "Graph":
-            st.subheader(f"{metric_filter} by Cancer Category")
-
-            # Convert to long format for Plotly
-            df_long = df_filtered.melt(
-                id_vars=[month_col, cancer_col],
-                value_vars=parameter_cols,
-                var_name="Parameter",
-                value_name="Value"
-            )
-
+            st.subheader(f"{metric_filter} by Parameter")
             fig = px.bar(
-                df_long,
-                y=cancer_col,
+                metric_df,
                 x="Value",
-                color="Parameter",
+                y="Parameter",
                 orientation="h",
-                barmode="group",
                 text="Value",
                 template="plotly_white",
-                title=f"{metric_filter} by Cancer Category"
+                color="Parameter",
+                title=f"{metric_filter} by Parameter"
             )
             fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
@@ -117,20 +128,12 @@ if uploaded_file:
                 file_name=f"Oncology_{metric_filter}.html",
                 mime="text/html"
             )
-
-        # -------------------------
-        # 8️⃣ Table
-        # -------------------------
         else:
             st.subheader(f"Data Table for {metric_filter}")
-            st.dataframe(
-                df_filtered[[month_col, cancer_col] + parameter_cols].sort_values(by=[month_col, cancer_col]),
-                height=500
-            )
-
+            st.dataframe(metric_df, height=500)
             # CSV download
             csv_buffer = io.StringIO()
-            df_filtered[[month_col, cancer_col] + parameter_cols].to_csv(csv_buffer, index=False)
+            metric_df.to_csv(csv_buffer, index=False)
             st.download_button(
                 label="Download CSV",
                 data=csv_buffer.getvalue(),
