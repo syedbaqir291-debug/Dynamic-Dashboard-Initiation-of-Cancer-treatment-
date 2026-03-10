@@ -146,3 +146,12 @@ if uploaded_file:
                 df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
                 height=500
             )
+            # CSV download
+            csv_buffer = io.StringIO()
+            df_filtered.to_csv(csv_buffer, index=False)
+            st.download_button(
+                label="Download Table CSV",
+                data=csv_buffer.getvalue(),
+                file_name=f"Oncology_Dashboard_{metric_filter}.csv",
+                mime="text/csv"
+            )
