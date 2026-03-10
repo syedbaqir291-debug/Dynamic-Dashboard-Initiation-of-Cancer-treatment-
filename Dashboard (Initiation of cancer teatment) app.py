@@ -1,4 +1,4 @@
-# app_oncology_dashboard_final_v4.py
+# app_oncology_dashboard_v5.py
 
 import streamlit as st
 import pandas as pd
@@ -41,76 +41,62 @@ if uploaded_file:
     # 4️⃣ Robust Numeric Cleanup
     # -------------------------
     for col in metric_cols:
-        # Convert to string, strip spaces, remove non-numeric characters, convert to float
-        df[col] = df[col].astype(str).str.strip()
-        df[col] = pd.to_numeric(df[col].replace(r'[^\d.]', '', regex=True), errors='coerce')
+        df[col] = df[col].astype(str).str.strip()  # remove spaces
+        df[col] = pd.to_numeric(df[col].replace(r'[^\d.]', '', regex=True), errors='coerce')  # numeric only
 
     # -------------------------
-    # 5️⃣ Aggregate metrics per cancer + month
+    # 5️⃣ Aggregate Metrics per Cancer + Month
     # -------------------------
-    grouped_all = df.groupby([cancer_col, month_col])[metric_cols].agg(
-        Mean=lambda x: np.nanmean(x),
-        Median=lambda x: np.nanmedian(x),
-        SD=lambda x: np.nanstd(x, ddof=1),
-        Max=lambda x: np.nanmax(x),
-        Min=lambda x: np.nanmin(x)
-    ).reset_index()
+    agg_dict = {col: [np.nanmean, np.nanmedian, lambda x: np.nanstd(x, ddof=1), np.nanmax, np.nanmin]
+                for col in metric_cols}
+
+    grouped_all = df.groupby([cancer_col, month_col]).agg(agg_dict)
+
+    # Flatten MultiIndex columns
+    grouped_all.columns = ['_'.join([col[0], col[1].__name__ if hasattr(col[1], '__name__') else 'SD']) for col in grouped_all.columns]
+    grouped_all = grouped_all.reset_index()
 
     # -------------------------
-    # 6️⃣ Reshape for dashboard
+    # 6️⃣ Reshape for Dashboard
     # -------------------------
-    # Rename columns to include metric type for melting
-    long_rows = []
-    for param in metric_cols:
-        temp = grouped_all[[cancer_col, month_col, param]].copy()
-        temp_mean = grouped_all[[cancer_col, month_col, param]].copy()
-        temp_melt = pd.DataFrame({
-            cancer_col: grouped_all[cancer_col],
-            month_col: grouped_all[month_col],
-            "Parameter": param,
-            "Mean": grouped_all[param].apply(np.nanmean),
-            "Median": grouped_all[param].apply(np.nanmedian),
-            "SD": grouped_all[param].apply(lambda x: np.nanstd([x], ddof=1) if not np.isnan(x) else np.nan),
-            "Max": grouped_all[param],
-            "Min": grouped_all[param]
-        })
-        long_rows.append(temp_melt)
-
-    final_df = pd.concat(long_rows, ignore_index=True)
-
-    # Round values to 2 decimals
-    final_df[["Mean", "Median", "SD", "Max", "Min"]] = final_df[["Mean", "Median", "SD", "Max", "Min"]].round(2)
+    final_df = pd.melt(
+        grouped_all,
+        id_vars=[cancer_col, month_col],
+        var_name="Parameter_Metric",
+        value_name="Value"
+    )
+    # Split "Parameter_Metric" into Parameter and Metric
+    final_df[['Parameter', 'Metric']] = final_df['Parameter_Metric'].str.rsplit('_', n=1, expand=True)
+    final_df['Value'] = final_df['Value'].round(2)
+    final_df = final_df.drop(columns=['Parameter_Metric'])
 
     # -------------------------
     # 7️⃣ Controls
     # -------------------------
     st.subheader("Controls")
 
-    # Metric Selector
     metric_filter = st.radio(
         "Select Metric",
-        options=["Mean", "Median", "SD", "Max", "Min"],
+        options=["nanmean", "nanmedian", "SD", "nanmax", "nanmin"],
+        format_func=lambda x: {'nanmean':'Mean','nanmedian':'Median','SD':'SD','nanmax':'Max','nanmin':'Min'}[x],
         horizontal=True
     )
 
-    # Month multi-select
     month_filter = st.multiselect(
         "Select Month(s)",
         options=final_df[month_col].unique(),
         default=final_df[month_col].unique()
     )
 
-    # Initialize session state for selected cancer categories
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
 
-    # Cancer Category Buttons (compact 2 rows)
     st.markdown("**Select Cancer Category(s)** (click to toggle)")
     cancer_options = list(final_df[cancer_col].unique())
     num_per_row = 6
     for i in range(0, len(cancer_options), num_per_row):
         cols = st.columns(num_per_row)
-        for j, cancer in enumerate(cancer_options[i:i + num_per_row]):
+        for j, cancer in enumerate(cancer_options[i:i+num_per_row]):
             if cols[j].button(cancer):
                 if cancer in st.session_state.selected_cancer:
                     st.session_state.selected_cancer.remove(cancer)
@@ -128,8 +114,8 @@ if uploaded_file:
             horizontal=True
         )
 
-        # Filter data for dashboard
         df_filtered = final_df[
+            (final_df["Metric"] == metric_filter) &
             (final_df[month_col].isin(month_filter)) &
             (final_df[cancer_col].isin(selected_cancer))
         ]
@@ -142,11 +128,11 @@ if uploaded_file:
             fig = px.bar(
                 df_filtered,
                 y=cancer_col,
-                x=metric_filter,
+                x="Value",
                 color="Parameter",
                 orientation='h',
                 barmode="group",
-                text=metric_filter,
+                text="Value",
                 template="plotly_white",
                 color_discrete_sequence=px.colors.qualitative.Plotly,
                 title=f"{metric_filter} by Cancer Category"
@@ -175,10 +161,9 @@ if uploaded_file:
         else:
             st.subheader(f"Data Table: {metric_filter}")
             st.dataframe(
-                df_filtered[[cancer_col, month_col, "Parameter", metric_filter]].sort_values(by=cancer_col),
+                df_filtered[[cancer_col, month_col, "Parameter", "Value"]].sort_values(by=cancer_col),
                 height=500
             )
-            # Download CSV
             csv_buffer = io.StringIO()
             df_filtered.to_csv(csv_buffer, index=False)
             st.download_button(
