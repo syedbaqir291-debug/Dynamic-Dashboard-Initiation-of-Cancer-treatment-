@@ -1,4 +1,4 @@
-# app_oncology_dashboard_v6.py
+# app_oncology_dashboard_v7.py
 
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ import io
 # -------------------------
 # 1️⃣ Page Config
 # -------------------------
-st.set_page_config(page_title="Oncology Dashboard", layout="wide")
+st.set_page_config(page_title="Dashboard By QPSD SKMCH & RC", layout="wide")
 st.title("Oncology Interactive Dashboard")
 
 # -------------------------
@@ -24,6 +24,9 @@ if uploaded_file:
 
     st.success("File uploaded successfully!")
 
+    # -------------------------
+    # 3️⃣ Columns
+    # -------------------------
     cancer_col = "Cancer Category"
     month_col = "Month"
     metric_cols = [
@@ -35,13 +38,16 @@ if uploaded_file:
     ]
 
     # -------------------------
-    # 3️⃣ Clean numeric columns
+    # 4️⃣ Robust numeric cleaning
     # -------------------------
     for col in metric_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce')  # converts anything non-numeric to NaN
+        df[col] = df[col].astype(str).str.strip()                     # remove spaces
+        df[col] = df[col].str.replace(r'[^\d.]', '', regex=True)     # remove non-numeric chars
+        df[col] = pd.to_numeric(df[col], errors='coerce')            # convert to numeric
+        df[col] = df[col].round(2)                                   # round for safety
 
     # -------------------------
-    # 4️⃣ Aggregate metrics per column with friendly names
+    # 5️⃣ Aggregate metrics per Cancer + Month
     # -------------------------
     agg_funcs = {
         "Mean": np.nanmean,
@@ -63,7 +69,7 @@ if uploaded_file:
     final_df["Value"] = final_df["Value"].round(2)
 
     # -------------------------
-    # 5️⃣ Controls
+    # 6️⃣ Controls
     # -------------------------
     metric_filter = st.radio(
         "Select Metric",
@@ -77,6 +83,7 @@ if uploaded_file:
         default=final_df[month_col].unique()
     )
 
+    # Multi-select Cancer Category
     if "selected_cancer" not in st.session_state:
         st.session_state.selected_cancer = []
 
@@ -106,7 +113,7 @@ if uploaded_file:
         ]
 
         # -------------------------
-        # 6️⃣ Graph or Table
+        # 7️⃣ Graph or Table
         # -------------------------
         if view_mode == "Graph":
             st.subheader(f"{metric_filter} of Parameters by Cancer Category")
@@ -124,6 +131,7 @@ if uploaded_file:
             fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
             st.plotly_chart(fig, use_container_width=True)
 
+            # Download HTML
             buffer = io.StringIO()
             fig.write_html(buffer, include_plotlyjs="cdn", full_html=True)
             st.download_button(
