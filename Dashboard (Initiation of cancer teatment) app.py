@@ -90,7 +90,8 @@ if uploaded_file:
                 elif metric == "Minimum":
                     value = data.min() if not data.empty else 0
 
-                row[param] = value
+                # ONLY CHANGE → limit to 1 decimal place
+                row[param] = round(value, 1)
 
             results.append(row)
 
