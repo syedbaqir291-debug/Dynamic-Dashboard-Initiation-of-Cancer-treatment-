@@ -116,14 +116,23 @@ if uploaded_file:
                 orientation="h",
                 text="Value",
                 barmode="group",
-                title=f"{metric} by Cancer Category (Raw Data)"
+                title=f"{metric} by Cancer Category (Raw Data)",
+                template="plotly_white"   # ensures colors remain in HTML export
             )
+
+            # ensure label shows one decimal
+            fig.update_traces(texttemplate="%{text:.1f}")
 
             st.plotly_chart(fig, use_container_width=True)
 
             # Download interactive HTML
             buffer = io.StringIO()
-            fig.write_html(buffer)
+            fig.write_html(
+                buffer,
+                include_plotlyjs="cdn",   # ensures proper rendering outside Streamlit
+                full_html=True
+            )
+
             st.download_button(
                 "Download Interactive HTML",
                 buffer.getvalue(),
